@@ -1,129 +1,125 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-// DOM elements
-const modelSelect = document.getElementById("model-select");
-const loadBtn = document.getElementById("load-btn");
+const loading = document.getElementById("loading");
 const loadProgress = document.getElementById("load-progress");
-const loadSection = document.getElementById("load-section");
-const chatLog = document.getElementById("chat-log");
+const messages = document.getElementById("messages");
 const chatForm = document.getElementById("chat-form");
 const promptInput = document.getElementById("prompt");
+const sendBtn = document.getElementById("send-btn");
 
 let engine = null;
 const conversationHistory = [];
 
-// Append a message bubble to the chat log
-function appendMessage(role, text) {
-  const entry = document.createElement("div");
-  entry.className = `chat-entry chat-entry--${role.toLowerCase()}`;
-  entry.innerHTML = `<span class="chat-role">${role}</span><span class="chat-text">${escapeHtml(text)}</span>`;
-  chatLog.appendChild(entry);
-  chatLog.scrollTop = chatLog.scrollHeight;
-  return entry;
+// Auto-resize textarea
+promptInput.addEventListener("input", () => {
+  promptInput.style.height = "auto";
+  promptInput.style.height = Math.min(promptInput.scrollHeight, 200) + "px";
+});
+
+// Submit on Enter (Shift+Enter for newline)
+promptInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (!sendBtn.disabled && promptInput.value.trim()) {
+      chatForm.requestSubmit();
+    }
+  }
+});
+
+function createMessage(role, content = "") {
+  const isUser = role === "user";
+  const div = document.createElement("div");
+  div.className = `message message--${isUser ? "user" : "ai"}`;
+  div.innerHTML = `
+    <div class="avatar">${isUser ? "Y" : "AI"}</div>
+    <div class="bubble">${content || '<div class="typing"><span></span><span></span><span></span></div>'}</div>
+  `;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+  return div;
 }
 
-// Update text in an existing message bubble (for streaming)
-function updateMessage(entry, text) {
-  entry.querySelector(".chat-text").textContent = text;
-  chatLog.scrollTop = chatLog.scrollHeight;
+function updateMessage(el, text) {
+  el.querySelector(".bubble").textContent = text;
+  messages.scrollTop = messages.scrollHeight;
 }
 
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-// Progress callback during model load
 function onInitProgress(report) {
   loadProgress.textContent = report.text;
 }
 
-// Load the selected model
 async function loadModel() {
-  const selectedModel = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
-  loadBtn.disabled = true;
-  loadBtn.textContent = "Loading…";
-  loadProgress.textContent = "Initializing WebLLM engine…";
+  loadProgress.textContent = "Checking WebGPU support…";
+
+  if (!navigator.gpu) {
+    loadProgress.textContent = "WebGPU not supported. Use Chrome 113+ or Edge.";
+    return;
+  }
+
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) {
+    loadProgress.textContent = "No WebGPU adapter found.";
+    return;
+  }
+
+  loadProgress.textContent = "Loading model…";
 
   try {
-    engine = await webllm.CreateMLCEngine(selectedModel, {
+    engine = await webllm.CreateMLCEngine("Llama-3.2-1B-Instruct-q4f16_1-MLC", {
       initProgressCallback: onInitProgress,
     });
-    loadProgress.textContent = `✅ ${selectedModel} loaded successfully!`;
-    loadSection.style.display = "none";
-    chatForm.style.display = "block";
+    loading.classList.add("hidden");
+    sendBtn.disabled = false;
+    promptInput.focus();
   } catch (err) {
-    loadProgress.textContent = `❌ Failed to load model: ${err.message}`;
-    loadBtn.disabled = false;
-    loadBtn.textContent = "Load Model";
+    loadProgress.textContent = `Failed: ${err.message}`;
     console.error(err);
   }
 }
 
-// Send a message and stream the response
-async function sendMessage(userMessage, temperature) {
+async function sendMessage(userMessage) {
   conversationHistory.push({ role: "user", content: userMessage });
 
-  const messages = [
-    { role: "system", content: "You are a helpful AI assistant." },
-    ...conversationHistory,
-  ];
-
-  // Create placeholder for assistant response
-  const assistantEntry = appendMessage("Assistant", "");
-  let assistantReply = "";
+  const aiMessage = createMessage("ai");
 
   try {
     const chunks = await engine.chat.completions.create({
-      messages,
-      temperature,
+      messages: [
+        { role: "system", content: "You are a helpful AI assistant." },
+        ...conversationHistory,
+      ],
+      temperature: 0.7,
       stream: true,
     });
 
+    let reply = "";
     for await (const chunk of chunks) {
       const delta = chunk.choices[0]?.delta?.content || "";
-      assistantReply += delta;
-      updateMessage(assistantEntry, assistantReply);
+      reply += delta;
+      updateMessage(aiMessage, reply);
     }
 
-    conversationHistory.push({ role: "assistant", content: assistantReply });
-    status.textContent = "Ready";
+    conversationHistory.push({ role: "assistant", content: reply });
   } catch (err) {
-    updateMessage(assistantEntry, `Error: ${err.message}`);
-    status.textContent = `Error: ${err.message}`;
+    updateMessage(aiMessage, `Error: ${err.message}`);
     console.error(err);
   }
 }
-loadModel();
 
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const userMessage = promptInput.value.trim();
-  if (!userMessage || !engine) return;
+  const text = promptInput.value.trim();
+  if (!text || !engine) return;
 
-  appendMessage("You", userMessage);
+  createMessage("user", text);
   promptInput.value = "";
-  status.textContent = "Generating…";
-  chatForm.querySelector("button").disabled = true;
+  promptInput.style.height = "auto";
+  sendBtn.disabled = true;
 
-  await sendMessage(userMessage, parseFloat(temperatureInput.value));
+  await sendMessage(text);
 
-  chatForm.querySelector("button").disabled = false;
+  sendBtn.disabled = false;
+  promptInput.focus();
 });
 
-(async () => {
-  if (!navigator.gpu) {
-    loadProgress.textContent = "❌ WebGPU is not supported in this browser. Try Chrome 113+ or Edge 113+.";
-    loadBtn.disabled = true;
-    return;
-  }
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) {
-    loadProgress.textContent = "❌ No WebGPU adapter found. Make sure your GPU drivers are up to date.";
-    loadBtn.disabled = true;
-    return;
-  }
-  loadProgress.textContent = "WebGPU available ✓ — select a model and click Load.";
-})();
+loadModel();
