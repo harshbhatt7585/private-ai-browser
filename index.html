@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Private AI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Loading overlay -->
+      <div id="loading" class="loading">
+        <div class="loading-content">
+          <div class="spinner"></div>
+          <p id="load-progress">Initializing…</p>
+        </div>
+      </div>
+
+      <!-- Chat area -->
+      <div class="chat-container">
+        <header>
+          <h1>Private AI</h1>
+          <span class="badge">Running locally</span>
+        </header>
+
+        <div id="messages" class="messages"></div>
+
+        <form id="chat-form" class="input-area">
+          <textarea
+            id="prompt"
+            placeholder="Message…"
+            rows="1"
+            required
+          ></textarea>
+          <button type="submit" id="send-btn" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
