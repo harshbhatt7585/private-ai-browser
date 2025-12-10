@@ -52,13 +52,19 @@ async function loadModel() {
   loadProgress.textContent = "Checking WebGPU support…";
 
   if (!navigator.gpu) {
-    loadProgress.textContent = "WebGPU not supported. Use Chrome 113+ or Edge.";
+    loadProgress.innerHTML = `
+      <strong>WebGPU not supported</strong><br><br>
+      <span style="font-size: 0.8rem; opacity: 0.8">
+        <b>Desktop:</b> Chrome 113+, Edge 113+<br>
+        iPhone 15/15 Plus, iPhone 14 are NOT supported
+      </span>
+    `;
     return;
   }
 
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) {
-    loadProgress.textContent = "No WebGPU adapter found.";
+    loadProgress.textContent = "No WebGPU adapter found. Your GPU may not be supported.";
     return;
   }
 
